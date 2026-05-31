@@ -23,8 +23,9 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/claude-agent-hub/claude-agent-hub.git
-cd claude-agent-hub
+git clone https://github.com/cryptrix1598/SubagentMarketplace
+cd ~/subagenthub
+
 
 # Install dependencies
 pnpm install
