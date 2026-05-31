@@ -1,0 +1,589 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// USER & AUTH
+// ============================================================================
+
+model User {
+  id             String    @id @default(cuid())
+  email          String    @unique
+  emailVerified  Boolean   @default(false)
+  name           String?
+  displayName    String?
+  username        String    @unique
+  bio            String?
+  website        String?
+  github         String?
+  twitter        String?
+  avatarUrl      String?
+  location       String?
+  isVerified     Boolean   @default(false)
+  isBanned       Boolean   @default(false)
+  role           UserRole  @default(USER)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  // Relations
+  agents              Agent[]
+  reviews             Review[]
+  stars               Star[]
+  follows             Follow[]           @relation("UserFollowers")
+  followers           Follow[]           @relation("UserFollowing")
+  collections         Collection[]
+  bundles             Bundle[]
+  organizationMembers OrganizationMember[]
+  sessions            Session[]
+  accounts            Account[]
+  reports             Report[]           @relation("Reporter")
+  auditLogs           AuditLog[]
+  notifications       Notification[]
+
+  @@index([email])
+  @@index([username])
+  @@index([isVerified])
+  @@map("users")
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  userId                String
+  accountId             String
+  providerId            String
+  accessToken           String?
+  refreshToken          String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  idToken               String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, accountId])
+  @@map("accounts")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+  @@map("sessions")
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([identifier, value])
+  @@map("verifications")
+}
+
+enum UserRole {
+  USER
+  PUBLISHER
+  ADMIN
+  SUPER_ADMIN
+}
+
+// ============================================================================
+// AGENTS
+// ============================================================================
+
+model Agent {
+  id                    String              @id @default(cuid())
+  name                  String
+  slug                  String
+  description           String
+  longDescription       String?
+  version               String
+  readme                String?
+  installationInstructions String?
+  license               String              @default("MIT")
+  category              AgentCategory
+  isPublic              Boolean             @default(true)
+  isFeatured            Boolean             @default(false)
+  isVerified            Boolean             @default(false)
+  downloads             Int                 @default(0)
+  views                 Int                 @default(0)
+  starsCount            Int                 @default(0)
+  forksCount            Int                 @default(0)
+  reviewsCount          Int                 @default(0)
+  averageRating         Float               @default(0)
+  trendingScore         Float               @default(0)
+  weeklyDownloads       Int                 @default(0)
+  monthlyDownloads      Int                 @default(0)
+  publishedAt           DateTime?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  // Relations
+  publisherId           String
+  publisher             User                @relation(fields: [publisherId], references: [id], onDelete: Cascade)
+  organizationId        String?
+  organization          Organization?       @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  tags                  AgentTag[]
+  versions              AgentVersion[]
+  reviews               Review[]
+  stars                 Star[]
+  forks                 Fork[]              @relation("AgentForks")
+  parentFork Fork[] @relation("AgentForkOf")
+  screenshots           Screenshot[]
+  dependencies AgentDependency[] @relation("AgentDependencies")
+  dependents AgentDependency[] @relation("AgentDependents")
+  bundles               BundleAgent[]
+  collections           CollectionAgent[]
+  agentFiles            AgentFile[]
+  downloadRecords       AgentDownload[]
+  reports               Report[]
+
+  @@unique([publisherId, slug])
+  @@index([slug])
+  @@index([category])
+  @@index([isPublic])
+  @@index([isFeatured])
+  @@index([trendingScore(sort: Desc)])
+  @@index([downloads(sort: Desc)])
+  @@index([starsCount(sort: Desc)])
+  @@index([createdAt(sort: Desc)])
+  @@index([averageRating(sort: Desc)])
+  @@map("agents")
+}
+
+enum AgentCategory {
+  CODING
+  TESTING
+  DEVOPS
+  FRONTEND
+  BACKEND
+  DATABASE
+  SECURITY
+  DOCUMENTATION
+  PRODUCTIVITY
+  DATA
+  AI_ML
+  DESIGN
+  MARKETING
+  FINANCE
+  OTHER
+}
+
+model AgentTag {
+  id      String  @id @default(cuid())
+  agentId String
+  tag     String
+  agent   Agent   @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, tag])
+  @@index([tag])
+  @@map("agent_tags")
+}
+
+model AgentVersion {
+  id           String   @id @default(cuid())
+  agentId      String
+  version      String
+  changelog    String?
+  readme       String?
+  isLatest     Boolean  @default(false)
+  downloads    Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  agent        Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  files        AgentFile[]
+
+  @@unique([agentId, version])
+  @@index([agentId, isLatest])
+  @@index([createdAt(sort: Desc)])
+  @@map("agent_versions")
+}
+
+model AgentFile {
+  id         String       @id @default(cuid())
+  versionId  String
+  agentId    String
+  path       String
+  content    String
+  fileType   AgentFileType
+  size       Int
+  createdAt  DateTime     @default(now())
+
+  version    AgentVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  agent      Agent        @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([versionId, path])
+  @@index([agentId])
+  @@map("agent_files")
+}
+
+enum AgentFileType {
+  AGENT_MD
+  SYSTEM_PROMPT
+  TOOLS_CONFIG
+  CONFIG
+  EXAMPLE
+  DOCUMENTATION
+  OTHER
+}
+
+model Screenshot {
+  id        String   @id @default(cuid())
+  agentId   String
+  url       String
+  alt       String?
+  caption   String?
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  agent     Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId])
+  @@map("screenshots")
+}
+
+model AgentDependency {
+  id              String @id @default(cuid())
+  agentId         String
+  dependencyId    String
+  agent           Agent  @relation("AgentDependencies", fields: [agentId], references: [id], onDelete: Cascade)
+  dependency      Agent  @relation("AgentDependents", fields: [dependencyId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, dependencyId])
+  @@index([agentId])
+  @@index([dependencyId])
+  @@map("agent_dependencies")
+}
+
+model AgentDownload {
+  id        String   @id @default(cuid())
+  agentId   String
+  versionId String?
+  userId    String?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  agent     Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId, createdAt])
+  @@index([userId])
+  @@map("agent_downloads")
+}
+
+// ============================================================================
+// REVIEWS & RATINGS
+// ============================================================================
+
+model Review {
+  id        String   @id @default(cuid())
+  agentId   String
+  userId    String
+  rating    Int
+  comment   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  agent     Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, userId])
+  @@index([agentId])
+  @@index([userId])
+  @@index([rating])
+  @@map("reviews")
+}
+
+model Star {
+  id        String   @id @default(cuid())
+  agentId   String
+  userId    String
+  createdAt DateTime @default(now())
+
+  agent     Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, userId])
+  @@index([agentId])
+  @@index([userId])
+  @@map("stars")
+}
+
+// ============================================================================
+// FORKS
+// ============================================================================
+
+model Fork {
+  id           String   @id @default(cuid())
+  agentId String
+  parentAgentId String
+  createdAt    DateTime @default(now())
+
+  agent        Agent    @relation("AgentForks", fields: [agentId], references: [id], onDelete: Cascade)
+  parentAgent Agent @relation("AgentForkOf", fields: [parentAgentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId])
+  @@index([parentAgentId])
+  @@map("forks")
+}
+
+// ============================================================================
+// FOLLOWS
+// ============================================================================
+
+model Follow {
+  id          String   @id @default(cuid())
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+
+  follower    User     @relation("UserFollowers", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User     @relation("UserFollowing", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+  @@index([followerId])
+  @@index([followingId])
+  @@map("follows")
+}
+
+// ============================================================================
+// ORGANIZATIONS
+// ============================================================================
+
+model Organization {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  website     String?
+  avatarUrl   String?
+  isVerified  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members     OrganizationMember[]
+  agents      Agent[]
+
+  @@index([slug])
+  @@index([isVerified])
+  @@map("organizations")
+}
+
+model OrganizationMember {
+  id             String          @id @default(cuid())
+  organizationId String
+  userId         String
+  role           OrgRole         @default(MEMBER)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+  @@map("organization_members")
+}
+
+enum OrgRole {
+  OWNER
+  ADMIN
+  MAINTAINER
+  MEMBER
+}
+
+// ============================================================================
+// COLLECTIONS
+// ============================================================================
+
+model Collection {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  coverUrl    String?
+  visibility  Visibility @default(PUBLIC)
+  userId      String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agents      CollectionAgent[]
+
+  @@index([userId])
+  @@index([visibility])
+  @@map("collections")
+}
+
+model CollectionAgent {
+  id           String     @id @default(cuid())
+  collectionId String
+  agentId      String
+  order        Int        @default(0)
+  addedAt      DateTime   @default(now())
+
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  agent        Agent      @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([collectionId, agentId])
+  @@index([collectionId])
+  @@map("collection_agents")
+}
+
+enum Visibility {
+  PUBLIC
+  PRIVATE
+}
+
+// ============================================================================
+// BUNDLES
+// ============================================================================
+
+model Bundle {
+  id          String    @id @default(cuid())
+  name        String
+  slug        String
+  description String
+  userId      String
+  isPublic    Boolean   @default(true)
+  downloads   Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agents      BundleAgent[]
+
+  @@unique([userId, slug])
+  @@index([userId])
+  @@index([isPublic])
+  @@map("bundles")
+}
+
+model BundleAgent {
+  id       String @id @default(cuid())
+  bundleId String
+  agentId  String
+  order    Int    @default(0)
+
+  bundle   Bundle @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  agent    Agent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([bundleId, agentId])
+  @@index([bundleId])
+  @@map("bundle_agents")
+}
+
+// ============================================================================
+// REPORTS & MODERATION
+// ============================================================================
+
+model Report {
+  id          String       @id @default(cuid())
+  reporterId  String
+  targetId    String
+  targetType  ReportTarget
+  reason      String
+  description String?
+  status      ReportStatus @default(PENDING)
+  resolvedBy  String?
+  resolvedAt  DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  reporter    User         @relation("Reporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  agent       Agent?       @relation(fields: [targetId], references: [id], onDelete: SetNull)
+
+  @@index([targetType, targetId])
+  @@index([status])
+  @@map("reports")
+}
+
+enum ReportTarget {
+  AGENT
+  USER
+  REVIEW
+  ORGANIZATION
+}
+
+enum ReportStatus {
+  PENDING
+  REVIEWING
+  RESOLVED
+  DISMISSED
+}
+
+// ============================================================================
+// AUDIT LOG
+// ============================================================================
+
+model AuditLog {
+  id        String          @id @default(cuid())
+  userId    String?
+  action    String
+  resource  String
+  resourceId String?
+  details   Json?
+  ipAddress String?
+  createdAt DateTime        @default(now())
+
+  user      User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([action])
+  @@index([resource, resourceId])
+  @@index([createdAt(sort: Desc)])
+  @@map("audit_logs")
+}
+
+// ============================================================================
+// NOTIFICATIONS
+// ============================================================================
+
+model Notification {
+  id        String              @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  message   String
+  data      Json?
+  isRead    Boolean             @default(false)
+  createdAt DateTime            @default(now())
+
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("notifications")
+}
+
+enum NotificationType {
+  NEW_STAR
+  NEW_REVIEW
+  NEW_FOLLOWER
+  NEW_FORK
+  AGENT_APPROVED
+  AGENT_REJECTED
+  ORGANIZATION_INVITE
+  BUNDLE_INSTALL
+  SYSTEM
+}
