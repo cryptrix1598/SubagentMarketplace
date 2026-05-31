@@ -24,7 +24,7 @@
 ```bash
 # Clone the repository
 git clone https://github.com/cryptrix1598/SubagentMarketplace
-cd ~/subagenthub
+cd ~/subagentmarketplace
 
 
 # Install dependencies
